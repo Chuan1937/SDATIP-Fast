@@ -1,3 +1,8 @@
+"""Waveform preprocessing and analysis module.
+
+Provides the Waveform class for seismic waveform data import, preprocessing,
+interpolation, threshold analysis, and state construction for Markov modeling.
+"""
 
 import numpy as np
 import obspy
@@ -7,24 +12,45 @@ import State
 
 
 class Waveform():
-    def __init__(self,name):
+    """Seismic waveform container with preprocessing and analysis capabilities.
+
+    Handles data import, detrending, interpolation, threshold-based binning,
+    and state construction for arrival time determination.
+    """
+
+    def __init__(self, name):
         self.name=name
         self.num = 1
 
     def importdata(self, data, delta):
+        """Import waveform data directly from numpy array.
+
+        Args:
+            data: 1D numpy array of amplitude values.
+            delta: Sampling interval in seconds.
+        """
         self.data = data
         self.delta = delta
         self.length = len(self.data)
         self.timestamp=np.linspace(0,self.delta*(self.length-1),self.length)
 
     def importdatafromsac(self, filename):
-        a=obspy.read('%s'%(filename))
+        """Import waveform data from SAC format file.
+
+        Args:
+            filename: Path to SAC file.
+        """
+        a = obspy.read('%s' % (filename))
         self.data=a[0].data
         self.delta=a[0].stats.delta
         self.length=len(self.data)
         self.timestamp = np.linspace(0, self.delta * (self.length - 1), self.length)
 
     def analyzedata(self):
+        """Compute statistical properties and locate extreme points.
+
+        Calculates mean, median, and identifies local maxima/minima.
+        """
         self.mean = np.mean(self.data)
         self.median = np.median(self.data)
         self.extrememax = argrelextrema(self.data, np.greater_equal)[0]
@@ -34,12 +60,14 @@ class Waveform():
         self.below0 = len(np.where(self.data < 0)[0])
 
     def rmmean(self):
+        """Remove mean from waveform data (detrend)."""
         self.data = self.data - self.mean
         self.above0 = len(np.where(self.data > 0)[0])
         self.below0 = len(np.where(self.data < 0)[0])
 
     def rmtail(self):
-        self.data = self.data[0:self.extremeall[-2] + 1]
+        """Remove trailing data after second-to-last extreme point."""
+        self.data = self.data[0 : self.extremeall[-2] + 1]
         self.extremeall = self.extremeall[0:-1]
         self.length = len(self.data)
         self.extrememax = argrelextrema(self.data, np.greater_equal)[0]
@@ -47,8 +75,13 @@ class Waveform():
         self.above0 = len(np.where(self.data > 0)[0])
         self.below0 = len(np.where(self.data < 0)[0])
 
-    def interpolate(self,coefficient):
-        self.densedelta=self.delta/coefficient
+    def interpolate(self, coefficient):
+        """Interpolate waveform to higher sampling density.
+
+        Args:
+            coefficient: Interpolation factor (e.g., 10 for 10x denser).
+        """
+        self.densedelta = self.delta / coefficient
         self.denselength=self.length+(self.length-1)*(coefficient-1)
         self.densetimestamp=np.linspace(0, self.densedelta * (self.denselength - 1), self.denselength)
         self.densedata=np.interp(self.densetimestamp, self.timestamp, self.data)
@@ -58,8 +91,11 @@ class Waveform():
         self.denseco=coefficient
         self.dataindexindense=np.arange(0,self.denselength-1+self.denseco,self.denseco)
 
-    def denseunique(self):        # 阈值选取
-        '''向量化操作'''
+    def denseunique(self):
+        """Extract unique threshold values from amplitude data.
+
+        Sorts absolute values, groups indices by amplitude for threshold selection.
+        """
         self.dense_abs = np.abs(self.densedata)
         sorter = np.argsort(self.dense_abs)
         self.dense_abs_unique, split_indices = np.unique(self.dense_abs[sorter], return_index=True)
@@ -67,8 +103,9 @@ class Waveform():
         self.threshold = self.dense_abs_unique
 
     def denselong(self, hvcoefficient, mininsertco):
-        """
-        向量化操作
+        """Create dense time series with adaptive interpolation.
+
+        Uses horizontal-vertical distance ratio to determine interpolation density.
         """
 
         if self.length <= 1:
@@ -122,8 +159,9 @@ class Waveform():
 
 # use like sign maximum near extreme point
     def extremearr(self):
-        """
-        向量化
+        """Compute extreme point array with sign-based fill logic.
+
+        Fills intervals between extreme points based on sign changes.
         """
         if len(self.longextremeall) < 2:
             self.longextremearr = np.zeros(self.longlength)
@@ -161,6 +199,11 @@ class Waveform():
         self.longextremearrmin = np.min(self.longextremearr)
 
     def densebin(self):
+        """Perform threshold-based binning analysis on dense waveform.
+
+        Iterates through thresholds, computes PMI values, identifies cut points,
+        and collects noise indices for state construction.
+        """
         thresholds = self.threshold
         longlength = self.longlength
         longextremearr = self.longextremearr
@@ -261,8 +304,10 @@ class Waveform():
         self.chances = chances_list
 
     def constructstate(self):
-        """
-        使用向量化索引
+        """Build State model from processed threshold results.
+
+        Groups noise indices by threshold and creates State objects
+        for Markov chain analysis.
         """
         state = State.State(self.name)
         thresholds = self.threshold
@@ -303,10 +348,21 @@ class Waveform():
 
 
 def findnoise(oriindex, dataindexinlong, dataindexindense, cutsolution):
+    """Find noise indices using vectorized binary search.
+
+    Maps original indices to dense indices and returns the noise range
+    along with the count of distribution segments.
+
+    Args:
+        oriindex: Original indices below threshold.
+        dataindexinlong: Mapping from original to long array indices.
+        dataindexindense: Mapping from original to dense array indices.
+        cutsolution: Cut point index in long array.
+
+    Returns:
+        Tuple of (noise indices in dense array, number of segments).
     """
-    使用向量化的二分法
-    """
-    # 處理邊界情況
+    # Handle boundary case
     if cutsolution == dataindexinlong[-1]:
         return np.arange(0, dataindexindense[-1] + 1), len(dataindexindense) - 1
 

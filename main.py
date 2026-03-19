@@ -1,10 +1,13 @@
-'''
-Author: chuanjun
-Date: 2025-05-27 18:57:42
-email: chuanjun1978@gmail.com
-website-github: https://github.com/Chuan1937
-LastEditTime: 2025-05-27 23:15:06
-'''
+"""SDATIP-Fast: Optimized seismic waveform arrival time and polarity analysis.
+
+This is a high-performance implementation of the algorithm from the paper:
+"Stochastic determination of arrival time and initial polarity of seismic waveform"
+
+Usage:
+    Edit the configuration variables at the top of this file, then run:
+        python main.py
+"""
+
 import numpy as np
 import obspy
 from single import solutionset
@@ -14,10 +17,17 @@ import os
 
 MAX_LENGTH = 6000
 
+# ==================== Configuration ====================
+INPUT_DIR = "./Hinettest/"
+OUTPUT_DIR = "./output/Hinettest/"
+NUM_WORKERS = -1          # -1 = use all available CPU cores
+PLOT_ENABLED = False     # False = skip plotting to save 5-10% time
+# ====================================================
 
 
 def worker_wrap(args):
-    i, trace, output_dir = args
+    """Worker function to process a single seismic trace."""
+    i, trace, output_dir, plot_enabled = args
     try:
         if len(trace.data) > MAX_LENGTH:
             trace.data = trace.data[:MAX_LENGTH]
@@ -27,46 +37,52 @@ def worker_wrap(args):
 
         data = st1.data.astype(np.float32)
 
-        solutionset(name, data, output_dir)
+        solutionset(name, data, output_dir, plot_enabled)
     except Exception as e:
         import traceback
+
         print(f"[Error] Trace {i} ({trace.id}) failed: {e}")
-        traceback.print_exc() 
+        traceback.print_exc()
 
 
 def main():
-
-
-    datadir = '/home/chuan/下载/algorithm-withsac/algorithm/input/Hinettest/3.2-5/N.TKSH_onset.SAC'
-    output_dir = './output/Hinettest/'
-
-
-    NUM_WORKERS = 2
-
+    datadir = INPUT_DIR
+    output_dir = OUTPUT_DIR
+    num_workers_config = NUM_WORKERS
+    plot_enabled = PLOT_ENABLED
 
     os.makedirs(output_dir, exist_ok=True)
 
     print(f"Reading data from: {datadir}")
-    stream = obspy.read(os.path.join(datadir, '*onset.SAC'))
+    stream = obspy.read(os.path.join(datadir, "*onset.SAC"))
     print(f"Found {len(stream)} traces to process.")
 
-    args_list = [(i, trace, output_dir) for i, trace in enumerate(stream)]
+    if not plot_enabled:
+        print("[INFO] Plotting disabled (PLOT_ENABLED = False)")
 
-    if NUM_WORKERS == -1:
+    args_list = [(i, trace, output_dir, plot_enabled) for i, trace in enumerate(stream)]
+
+    if num_workers_config == -1:
         num_workers = mp.cpu_count()
         print(f"Configuration set to use all available cores: {num_workers}")
-    elif NUM_WORKERS > mp.cpu_count():
+    elif num_workers_config > mp.cpu_count():
         num_workers = mp.cpu_count()
         print(
-            f"Warning: Requested workers ({NUM_WORKERS}) > available cores ({num_workers}). Using {num_workers} cores.")
+            f"Warning: Requested workers ({num_workers_config}) > available cores ({num_workers}). "
+            f"Using {num_workers} cores."
+        )
     else:
-        num_workers = NUM_WORKERS
+        num_workers = num_workers_config
         print(f"Configuration set to use {num_workers} worker(s).")
 
     if num_workers > 1:
         print("Running in multi-processing mode...")
         with mp.Pool(processes=num_workers) as pool:
-            for _ in tqdm(pool.imap_unordered(worker_wrap, args_list), total=len(args_list), desc="Processing traces"):
+            for _ in tqdm(
+                pool.imap_unordered(worker_wrap, args_list),
+                total=len(args_list),
+                desc="Processing traces",
+            ):
                 pass
     else:
         print("Running in single-threaded mode...")
@@ -75,6 +91,6 @@ def main():
     print("Processing finished.")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     mp.freeze_support()
     main()

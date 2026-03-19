@@ -1,11 +1,17 @@
 import numpy as np
-import plotresult
-import plotresult_graduate
 from Waveform import Waveform
 
 
-def solutionset(name, data, outputdir):
-    a = Waveform('%s' % (name))
+def solutionset(name, data, outputdir, plot_enabled=True):
+    """Process a single seismic waveform to estimate arrival time and polarity.
+
+    Args:
+        name: Station name identifier
+        data: Waveform amplitude data array
+        outputdir: Output directory path for results
+        plot_enabled: If False, skip plotting to save 5-10% processing time
+    """
+    a = Waveform("%s" % (name))
     a.importdata(data, 0.01)
     a.analyzedata()
     a.interpolate(1)
@@ -14,37 +20,42 @@ def solutionset(name, data, outputdir):
     a.extremearr()
     a.densebin()
     b = a.constructstate()
-    [c, c_num] = b.markovmatrix()
+    c, c_num = b.markovmatrix()
     d = b.ampprobcalculate()
 
-
     main_data_to_save = {
-        'transitionmatrix': np.array(b.matrix),
-        'ampprob': np.array(b.ampprob_up).astype('float64'),
-        'Apeak': b.Apeak,
-        'samplelength': b.samplength,
-        'eigvalue': b.eigvalue,
-        'bigeig': b.bigeig,
-        'threshold': a.threshold
+        "transitionmatrix": np.array(b.matrix),
+        "ampprob": np.array(b.ampprob_up).astype("float64"),
+        "Apeak": b.Apeak,
+        "samplelength": b.samplength,
+        "eigvalue": b.eigvalue,
+        "bigeig": b.bigeig,
+        "threshold": a.threshold,
     }
 
-    main_filepath = f'{outputdir}{a.name}.npz'
+    main_filepath = f"{outputdir}{a.name}.npz"
     np.savez_compressed(main_filepath, **main_data_to_save, allow_pickle=True)
-    for i in range(0, c_num):
+
+    for i in range(c_num):
         b.estimation(i)
-        timeprob_filepath = f'{outputdir}{a.name}_timeprob_{i}.npz'
+        timeprob_filepath = f"{outputdir}{a.name}_timeprob_{i}.npz"
         np.savez_compressed(timeprob_filepath, timeprob=c[i])
 
-        plotresult.plotprob(a, b, i, a.name, outputdir)
-        plotresult_graduate.plotprob(a, b, i, a.name, outputdir)
-        txt_filepath = f'{outputdir}{name}.txt'
+        if plot_enabled:
+            import plotresult
+            import plotresult_graduate
+
+            plotresult.plotprob(a, b, i, a.name, outputdir)
+            plotresult_graduate.plotprob(a, b, i, a.name, outputdir)
+
+        txt_filepath = f"{outputdir}{name}.txt"
         with open(txt_filepath, "a") as f:
             line = (
-                f'{name} solution id:{i} '
-                f'arrivaltime:{b.arrivalestimate:.3f} '
-                f'overall up:{float(np.sum(c[i] * d)):.5f} '
-                f'up:{b.polarityup:.3f} '
-                f'down:{b.polaritydown:.3f} '
-                f'unknown:{b.polarityunknown:.3f}\n'
+                f"{name} solution id:{i} "
+                f"arrivaltime:{b.arrivalestimate:.3f} "
+                f"overall up:{float(np.sum(c[i] * d)):.5f} "
+                f"up:{b.polarityup:.3f} "
+                f"down:{b.polaritydown:.3f} "
+                f"unknown:{b.polarityunknown:.3f}\n"
             )
             f.writelines(line)
