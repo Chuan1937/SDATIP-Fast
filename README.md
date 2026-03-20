@@ -1,165 +1,119 @@
-# SDATIP
+# SDATIP-Fast
 
-[![PyPI version](https://badge.fury.io/py/sdatip.svg)](https://badge.fury.io/py/sdatip)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+Python implementation of SDATIP for fast stochastic determination of arrival time and initial polarity of seismic waveforms.
 
-**Fast Stochastic Determination of Arrival Time and Initial Polarity of Seismic Waveforms**
+![Python](https://img.shields.io/badge/python-3.8+-orange.svg)
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![Numba](https://img.shields.io/badge/numba-0.55+-red.svg)
+![Numpy](https://img.shields.io/badge/numpy-1.20+-yellow.svg)
+![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)
 
-A high-performance Python package for seismic waveform analysis that determines arrival time and initial polarity using Markov chain-based stochastic methods.
+Python uses Numba JIT compilation optimization and vectorization, achieving speed improvements while maintaining complete consistency with the original stochastic algorithm.
 
 ## Performance
 
-| Metric | Original | SDATIP |
-|--------|----------|--------|
-| 100Hz, 10s waveform | ~30 minutes | ~55 seconds |
-| Speedup | - | **30x faster** |
+| Metric | Python+Numba | Original Python | Speedup |
+|--------|-------------|---------|---------|
+| 100Hz, 10s waveform | ~55 seconds | ~30 minutes | **~30x** |
 
-## Installation
+## Accuracy Verification
+
+**Key Results:**
+- Arrival time estimation matches the original theoretical probability distribution completely.
+- Initial polarity estimation maintains exactly the same mathematical rigor.
+- Core logic produces identical pointwise mutual information matrices.
+
+## Quick Start
 
 ```bash
 pip install sdatip
 ```
 
-Or install from source:
-
-```bash
-git clone https://github.com/Chuan1937/SDATIP-Fast.git
-cd SDATIP-Fast
-pip install -e .
-```
-
-## Quick Start
-
-### Process a Single Waveform
+### Basic Usage (Single Waveform Process)
 
 ```python
-import numpy as np
 import sdatip
+import obspy
 
-# Your waveform data (1D numpy array)
-data = np.random.randn(1000)
+# Read your waveform data (e.g., SAC file)
+stream = obspy.read("Hinettest/N.AAKH_onset.SAC")
+trace = stream[0]
+data = trace.data         # 1D numpy array
+delta = trace.stats.delta # Sampling interval in seconds
 
 # Process the waveform
 result = sdatip.process_waveform(
-    name="STATION_A",
+    name="example_station",
     data=data,
-    output_dir="./output/"
+    output_dir="./output_example/",
+    delta=delta,
+    plot_enabled=False
 )
 
-# Get results
-print(f"Arrival time: {result['results'][0]['arrival_time']:.3f}s")
+print(f"Arrival time: {result['results'][0]['arrival_time']:.3f} s")
 print(f"Polarity (up): {result['results'][0]['polarity_up']:.3f}")
 ```
 
-### Process Multiple Waveforms
+### Batch Processing
 
 ```python
 import sdatip
 
-# Batch process all SAC files in a directory
-results = sdatip.process_batch(
-    input_dir="./data/",
-    output_dir="./output/",
-    num_workers=4,  # Use 4 CPU cores
-    plot_enabled=False
+# Batch process all SAC files in a directory using multiprocessing
+sdatip.process_batch(
+    input_dir="Hinettest",
+    output_dir="output_example",
+    num_workers=4,    # Specify the number of CPU cores
+    plot_enabled=True # Automatically generate probability visualization figures
 )
 ```
 
-### Step-by-Step Processing
+## Features
 
-```python
-import sdatip
+- Stochastic determination of arrival time and initial polarity
+- Markov chain probability modeling and density estimation
+- Numba JIT compilation & vectorization for drastic speed optimization
+- Built-in uncertainty and probability matrix visualization
+- Multiprocessing batch support for handling massive waveform datasets seamlessly
+- Core algorithm matches the original reference paper perfectly
 
-# Create waveform object
-wf = sdatip.Waveform("station")
-wf.importdata(data, delta=0.01)
-wf.analyzedata()
-wf.rmmean()
-wf.interpolate(1)
-wf.denseunique()
-wf.denselong(hvcoefficient=2.5, mininsertco=200)
-wf.extremearr()
-wf.densebin()
+## Documentation
 
-# Build state model
-state = wf.constructstate()
-timeprobs, num_solutions = state.markovmatrix()
-ampprob = state.ampprobcalculate()
+See https://sdatip.readthedocs.io/ for full documentation including:
+- API reference
+- Algorithm details
+- Output file specifications
+- Performance optimization
 
-# Estimate results
-state.estimation(0)
-print(f"Arrival: {state.arrivalestimate:.3f}s")
-print(f"Polarity up: {state.polarityup:.3f}")
-```
-
-## API Reference
-
-### `process_waveform(name, data, output_dir, ...)`
-
-Process a single seismic waveform.
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `name` | str | required | Station name |
-| `data` | np.ndarray | required | 1D amplitude array |
-| `output_dir` | str | required | Output directory |
-| `delta` | float | 0.01 | Sampling interval (s) |
-| `plot_enabled` | bool | True | Generate plots |
-
-### `process_batch(input_dir, output_dir, ...)`
-
-Process multiple waveforms in parallel.
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `input_dir` | str | required | Input directory with SAC files |
-| `output_dir` | str | required | Output directory |
-| `num_workers` | int | -1 | CPU cores (-1 = all) |
-| `plot_enabled` | bool | False | Generate plots |
-
-### Classes
-
-- `Waveform(name)` - Waveform preprocessing container
-- `State(name)` - Markov state model
-
-## Output Files
-
-| File | Description |
-|------|-------------|
-| `{station}.txt` | Text summary with arrival time and polarity |
-| `{station}.npz` | Main results (matrix, probabilities, thresholds) |
-| `{station}_timeprob_{i}.npz` | Time probability distribution |
-| `{station}_{i}.pdf` | Probability plot (if enabled) |
-| `{station}.eps` | Publication-ready plot (if enabled) |
-
-## Algorithm
-
-Based on: Pei, W., Zhuang, J. & Zhou, S. "Stochastic determination of arrival time and initial polarity of seismic waveform." *Earth Planets Space* 77, 36 (2025). https://doi.org/10.1186/s40623-025-02161-5
-
-## Validation
+## Run Tests
 
 ```bash
-python benchmark_validate.py check
+jupyter notebook example.ipynb
 ```
 
-## Citation
+## Project Structure
 
-```bibtex
-@article{pei2025stochastic,
-  title={Stochastic determination of arrival time and initial polarity of seismic waveform},
-  author={Pei, W. and Zhuang, J. and Zhou, S.},
-  journal={Earth, Planets and Space},
-  volume={77},
-  pages={36},
-  year={2025},
-  doi={10.1186/s40623-025-02161-5}
-}
+```text
+SDATIP-Fast/
+├── sdatip/
+│   ├── processor.py   # High-level API drivers (process_waveform, process_batch)
+│   ├── waveform.py    # Preprocessing, extreme points, interpolations (Waveform)
+│   ├── state.py       # Markov transition matrices, likelihood modeling (State)
+│   ├── pmi.py         # Pointwise mutual information tools (PMI, MaxPMI)
+│   └── plotting.py    # Display rendering and visualization logic
+│
+├── Hinettest/         # Example dataset containing SAC waveform files
+└── example.ipynb      # Complete test script & interactive demonstration
 ```
+
+## Author
+
+He XingChen
 
 ## License
 
 MIT License
 
-## Star History
+## References
 
-[![Star History Chart](https://api.star-history.com/svg?repos=Chuan1937/SDATIP-Fast&type=Date)](https://star-history.com/#Chuan1937/SDATIP-Fast&Date)
+Pei, W., Zhuang, J. & Zhou, S. Stochastic determination of arrival time and initial polarity of seismic waveform. *Earth Planets Space* 77, 36 (2025). https://doi.org/10.1186/s40623-025-02161-5
