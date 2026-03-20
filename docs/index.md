@@ -1,6 +1,6 @@
-# SDATIP-Fast Documentation
+# SDATIP Documentation
 
-Welcome to the documentation for **SDATIP-Fast**!
+Welcome to the documentation for **SDATIP**!
 
 Python implementation of SDATIP for fast stochastic determination of arrival time and initial polarity of seismic waveforms.
 
@@ -8,7 +8,7 @@ Python uses Numba JIT compilation optimization and vectorization, achieving spee
 
 ## Overview
 
-SDATIP-Fast is a high-performance Python package for seismic waveform analysis that determines arrival time and initial polarity using Markov chain-based stochastic methods.
+SDATIP is a high-performance Python package for seismic waveform analysis that determines arrival time and initial polarity using Markov chain-based stochastic methods.
 
 ### Key Features
 - **High Performance**: ~30x faster than original Python implementation using Numba JIT.
