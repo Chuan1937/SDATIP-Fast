@@ -1,2 +1,10 @@
 __pycache__/
 /benchmark_data/
+sdatip.egg-info/
+dist/
+output_example/
+output_auto_plot/
+output_batch/
+*_pycache__/
+*.egg-info/
+*.egg
